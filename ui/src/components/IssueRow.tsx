@@ -8,14 +8,12 @@ import {
   withIssueDetailHeaderSeed,
 } from "../lib/issueDetailBreadcrumb";
 import { cn } from "../lib/utils";
-import {
-  deriveActiveRecoveryDisplayState,
-  RECOVERY_CHIP_DEFAULT_TONE,
-  recoveryChipLabel,
-} from "../lib/recovery-display";
+import { deriveActiveRecoveryDisplayState, RECOVERY_CHIP_DEFAULT_TONE } from "../lib/recovery-display";
 import { StatusIcon } from "./StatusIcon";
 import { productivityReviewTriggerLabel } from "./ProductivityReviewBadge";
 import { hasAssignedBacklogBlocker } from "../lib/issue-blockers";
+import { Badge } from "@/components/ui/badge";
+import { parseTaxonomyTag } from "../lib/taxonomy";
 
 type UnreadState = "hidden" | "visible" | "fading";
 
@@ -64,6 +62,7 @@ export function IssueRow({
   archiveDisabled,
   className,
 }: IssueRowProps) {
+  const taxonomy = parseTaxonomyTag(issue.title);
   const issuePathId = issue.identifier ?? issue.id;
   const identifier = issue.identifier ?? issue.id.slice(0, 8);
   const showUnreadSlot = unreadState !== null;
@@ -127,7 +126,12 @@ export function IssueRow({
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1 sm:contents">
         <span className={cn("line-clamp-2 text-sm sm:order-2 sm:min-w-0 sm:flex-1 sm:truncate sm:line-clamp-none", titleClassName)}>
-          {issue.title}{titleSuffix}
+          {taxonomy.tag ? (
+            <Badge variant={taxonomy.badgeVariant} className={cn("mr-2 h-5 text-[10px] px-1.5 py-0", taxonomy.colorClass)}>
+              {taxonomy.tag}
+            </Badge>
+          ) : null}
+          {taxonomy.cleanTitle}{titleSuffix}
         </span>
         {checklistDependencyChips ? (
           <span className="flex flex-wrap gap-1 sm:order-3 sm:ml-[calc(theme(spacing.3)+theme(spacing.2))]">
@@ -237,23 +241,21 @@ function renderRecoveryChip(action: IssueRecoveryAction, selected: boolean): Rea
   if (!state) return null;
   const tone = RECOVERY_CHIP_DEFAULT_TONE[state];
   const Icon = tone.icon;
-  const label = recoveryChipLabel(state, action.kind);
   return (
     <span
       data-testid="issue-row-recovery-indicator"
       data-recovery-state={state}
-      data-recovery-kind={action.kind}
       role="status"
-      aria-label={label}
+      aria-label={tone.label}
       className={cn(
         "ml-1.5 inline-flex shrink-0 items-center gap-0.5 rounded-full border px-2 py-0.5 text-[10px] font-medium",
         tone.className,
         selected ? "!border-muted-foreground !text-muted-foreground" : null,
       )}
-      title={`${label} — open the source task to act.`}
+      title={`${tone.label} — open the source issue to act.`}
     >
       <Icon className="h-2.5 w-2.5" aria-hidden />
-      {label}
+      {tone.label}
     </span>
   );
 }
