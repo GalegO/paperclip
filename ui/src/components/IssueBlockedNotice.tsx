@@ -2,14 +2,15 @@ import type {
   IssueBlockerAttention,
   IssueRecoveryAction,
   IssueRelationIssueSummary,
-  IssueScheduledRetry,
   SuccessfulRunHandoffState,
+  IssueScheduledRetry,
 } from "@paperclipai/shared";
-import { AlertTriangle, CheckCircle2, Flag, Loader2, RotateCcw } from "lucide-react";
+import { AlertTriangle, Flag } from "lucide-react";
 import { Link } from "@/lib/router";
 import { Button } from "@/components/ui/button";
 import { createIssueDetailPath } from "../lib/issueDetailBreadcrumb";
 import { formatMonitorOffset } from "../lib/issue-monitor";
+import { Loader2, CheckCircle2, RotateCcw } from "lucide-react";
 import { useRetryNowMutation } from "../hooks/useRetryNowMutation";
 import { IssueLinkQuicklook } from "./IssueLinkQuicklook";
 import { RetryErrorBand } from "./IssueScheduledRetryCard";
@@ -17,30 +18,7 @@ import { isAssignedBacklogBlocker } from "../lib/issue-blockers";
 import {
   deriveActiveRecoveryDisplayState,
   RECOVERY_CHIP_DEFAULT_TONE,
-  recoveryChipLabel,
 } from "../lib/recovery-display";
-
-function BlockerRecoveryIndicator({ action }: { action: IssueRecoveryAction }) {
-  const state = deriveActiveRecoveryDisplayState(action);
-  if (!state) return null;
-  const tone = RECOVERY_CHIP_DEFAULT_TONE[state];
-  const Icon = tone.icon;
-  const label = recoveryChipLabel(state, action.kind);
-  return (
-    <span
-      data-testid="issue-blocked-notice-recovery-indicator"
-      data-recovery-state={state}
-      data-recovery-kind={action.kind}
-      role="status"
-      aria-label={label}
-      title={`${label} — open the source task to act.`}
-      className={`inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${tone.className}`}
-    >
-      <Icon className="h-2.5 w-2.5" aria-hidden />
-      {label}
-    </span>
-  );
-}
 
 function SuccessfulRunRetryNowControl({
   issueId,
@@ -50,60 +28,78 @@ function SuccessfulRunRetryNowControl({
   scheduledRetry: IssueScheduledRetry;
 }) {
   const retryNow = useRetryNowMutation(issueId);
-  const dueAtIso = scheduledRetry.scheduledRetryAt
-    ? new Date(scheduledRetry.scheduledRetryAt).toISOString()
+  const isSuccessTransient =
+    retryNow.isSuccess &&
+    (retryNow.data?.outcome === "promoted" || retryNow.data?.outcome === "already_promoted");
+  const isError = retryNow.isError || retryNow.lastError !== null;
+  const relative = scheduledRetry.scheduledRetryAt
+    ? formatMonitorOffset(new Date(scheduledRetry.scheduledRetryAt).toISOString())
     : null;
-  const relative = dueAtIso ? formatMonitorOffset(dueAtIso) : null;
-  const scheduleLabel = relative === "now"
-    ? "due now"
-    : relative
-      ? `scheduled ${relative}`
-      : "scheduled";
-  const success = retryNow.isSuccess
-    && (retryNow.data?.outcome === "promoted" || retryNow.data?.outcome === "already_promoted");
+  const suffix = relative && relative !== "now" ? ` scheduled ${relative}` : "";
 
   return (
-    <div className="mt-2 rounded-md border border-amber-300/70 bg-background/80 p-2 dark:border-amber-500/40 dark:bg-background/40">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 text-xs leading-5 text-amber-900 dark:text-amber-100">
-          Corrective wake {scheduleLabel}. Retry now starts the same recovery path immediately.
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="shrink-0 border-amber-300/80 bg-background/80 text-amber-950 shadow-none hover:bg-amber-100 dark:border-amber-500/50 dark:bg-background/40 dark:text-amber-100 dark:hover:bg-amber-500/15"
-          onClick={() => retryNow.mutate()}
-          disabled={retryNow.isPending || success}
-          data-testid="issue-next-step-retry-now"
-        >
-          {retryNow.isPending ? (
-            <span className="inline-flex items-center gap-1.5">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-              Retrying...
-            </span>
-          ) : success ? (
-            <span className="inline-flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-              {retryNow.data?.outcome === "already_promoted" ? "Already promoted" : "Promoted"}
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5">
-              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-              Retry now
-            </span>
-          )}
-        </Button>
-      </div>
-      <RetryErrorBand
-        error={retryNow.lastError}
-        className="mt-2 border-amber-300/70 bg-amber-100/70 text-amber-950 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-100"
-        onRetry={() => {
-          retryNow.reset();
-          retryNow.mutate();
-        }}
-      />
+    <div className="mt-1 flex flex-col gap-1">
+      {suffix ? (
+        <span className="text-xs text-amber-800 dark:text-amber-200">
+          Corrective wake{suffix}
+        </span>
+      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="self-start shadow-none"
+        onClick={() => retryNow.mutate()}
+        disabled={retryNow.isPending || isSuccessTransient}
+        data-testid="issue-next-step-retry-now"
+      >
+        {retryNow.isPending ? (
+          <span className="inline-flex items-center gap-1.5">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            Retrying…
+          </span>
+        ) : isSuccessTransient ? (
+          <span className="inline-flex items-center gap-1.5">
+            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+            {retryNow.data?.outcome === "already_promoted" ? "Already promoted" : "Promoted"}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5">
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+            Retry now
+          </span>
+        )}
+      </Button>
+      {isError ? (
+        <RetryErrorBand
+          error={retryNow.lastError}
+          onRetry={() => {
+            retryNow.reset();
+            retryNow.mutate();
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function BlockerRecoveryIndicator({ action }: { action: IssueRecoveryAction }) {
+  const state = deriveActiveRecoveryDisplayState(action);
+  if (!state) return null;
+  const tone = RECOVERY_CHIP_DEFAULT_TONE[state];
+  const Icon = tone.icon;
+  return (
+    <span
+      data-testid="issue-blocked-notice-recovery-indicator"
+      data-recovery-state={state}
+      role="status"
+      aria-label={tone.label}
+      title={`${tone.label} — open the source issue to act.`}
+      className={`inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${tone.className}`}
+    >
+      <Icon className="h-2.5 w-2.5" aria-hidden />
+      {tone.label}
+    </span>
   );
 }
 
@@ -133,7 +129,7 @@ export function IssueBlockedNotice({
       ? { issueId, scheduledRetry }
       : null;
 
-  const blockerLabel = blockers.length === 1 ? "the linked task" : "the linked tasks";
+  const blockerLabel = blockers.length === 1 ? "the linked issue" : "the linked issues";
   const terminalBlockers = blockers
     .flatMap((blocker) => blocker.terminalBlockers ?? [])
     .filter((blocker, index, all) => all.findIndex((candidate) => candidate.id === blocker.id) === index);
@@ -208,9 +204,9 @@ export function IssueBlockedNotice({
         <div className="min-w-0 space-y-1.5">
           {showSuccessfulRunHandoff ? (
             <>
-              <p className="font-medium leading-5">This task still needs a next step.</p>
+              <p className="font-medium leading-5">This issue still needs a next step.</p>
               <p className="leading-5">
-                A run finished successfully, but this task is still open in{" "}
+                A run finished successfully, but this issue is still open in{" "}
                 <code className="rounded bg-amber-100 px-1 py-0.5 text-[12px] dark:bg-amber-400/15">
                   in_progress
                 </code>{" "}
@@ -261,10 +257,10 @@ export function IssueBlockedNotice({
                 {blockers.length > 0
                   ? isStalled
                     ? stalledLeafBlockers.length > 1
-                      ? <>Work on this task is blocked by {blockerLabel}, but the chain is stalled in review without a clear next step. Resolve the stalled reviews below or remove them as blockers.</>
-                      : <>Work on this task is blocked by {blockerLabel}, but the chain is stalled in review without a clear next step. Resolve the stalled review below or remove it as a blocker.</>
-                    : <>Work on this task is blocked by {blockerLabel} until {blockers.length === 1 ? "it is" : "they are"} complete. Comments still wake the assignee for questions or triage.</>
-                  : <>Work on this task is blocked until it is moved back to todo. Comments still wake the assignee for questions or triage.</>}
+                      ? <>Work on this issue is blocked by {blockerLabel}, but the chain is stalled in review without a clear next step. Resolve the stalled reviews below or remove them as blockers.</>
+                      : <>Work on this issue is blocked by {blockerLabel}, but the chain is stalled in review without a clear next step. Resolve the stalled review below or remove it as a blocker.</>
+                    : <>Work on this issue is blocked by {blockerLabel} until {blockers.length === 1 ? "it is" : "they are"} complete. Comments still wake the assignee for questions or triage.</>
+                  : <>Work on this issue is blocked until it is moved back to todo. Comments still wake the assignee for questions or triage.</>}
               </p>
               {blockers.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
