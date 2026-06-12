@@ -65,6 +65,7 @@ import { getTelemetryClient } from "../telemetry.js";
 import type { StorageService } from "../storage/types.js";
 import { validate } from "../middleware/validate.js";
 import * as serviceIndex from "../services/index.js";
+import { sddLocalSyncService } from "../services/sdd-local-sync.js";
 import {
   accessService,
   agentService,
@@ -3008,9 +3009,24 @@ export function issueRoutes(
     }
     assertCompanyAccess(req, issue.companyId);
     if (!(await assertIssueReadAllowed(req, res, issue))) return;
-    const docs = await documentsSvc.listIssueDocuments(issue.id, {
+    
+    let docs = await documentsSvc.listIssueDocuments(issue.id, {
       includeSystem: req.query.includeSystem === "true",
     });
+
+    const settingsSvc = instanceSettingsService(db);
+    const experimentalSettings = await settingsSvc.getExperimental();
+    if (experimentalSettings.enableSddLocalSync && experimentalSettings.sddLocalSyncPath) {
+      const actorInfo = getActorInfo(req);
+      docs = await sddLocalSyncService(db).syncFromDiskIfNeeded(
+        experimentalSettings.sddLocalSyncPath,
+        issue,
+        docs,
+        actorInfo.actorType === "agent" ? (actorInfo.agentId ?? undefined) : undefined,
+        actorInfo.actorType === "user" ? (actorInfo.actorId ?? undefined) : undefined
+      ) as typeof docs;
+    }
+
     res.json(docs);
   });
 
@@ -3373,7 +3389,42 @@ export function issueRoutes(
       documentChanged: true,
     });
 
+    const settingsSvc = instanceSettingsService(db);
+    const experimentalSettings = await settingsSvc.getExperimental();
+    if (experimentalSettings.enableSddLocalSync && experimentalSettings.sddLocalSyncPath) {
+      await sddLocalSyncService(db).syncToDisk(
+        experimentalSettings.sddLocalSyncPath,
+        issue,
+        doc.key,
+        doc.body
+      );
+    }
+
     res.status(result.created ? 201 : 200).json(doc);
+  });
+
+  router.post("/issues/:id/documents/open-folder", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    
+    const settingsSvc = instanceSettingsService(db);
+    const experimentalSettings = await settingsSvc.getExperimental();
+    if (!experimentalSettings.enableSddLocalSync || !experimentalSettings.sddLocalSyncPath) {
+      res.status(400).json({ error: "Local sync is not enabled or path is missing" });
+      return;
+    }
+
+    try {
+      await sddLocalSyncService(db).openFolderInOS(experimentalSettings.sddLocalSyncPath, issue);
+      res.status(200).json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to open folder" });
+    }
   });
 
   router.post("/issues/:id/documents/:key/lock", async (req, res) => {

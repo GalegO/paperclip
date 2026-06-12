@@ -123,6 +123,7 @@ export function InstanceExperimentalSettings() {
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);
   const [lookbackHoursDraft, setLookbackHoursDraft] = useState("24");
+  const [sddSyncPathDraft, setSddSyncPathDraft] = useState("");
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [pendingPreview, setPendingPreview] = useState<IssueGraphLivenessAutoRecoveryPreview | null>(null);
 
@@ -188,7 +189,11 @@ export function InstanceExperimentalSettings() {
     if (typeof next === "number") {
       setLookbackHoursDraft(String(next));
     }
-  }, [experimentalQuery.data?.issueGraphLivenessAutoRecoveryLookbackHours]);
+    const nextSddPath = experimentalQuery.data?.sddLocalSyncPath;
+    if (typeof nextSddPath === "string") {
+      setSddSyncPathDraft(nextSddPath);
+    }
+  }, [experimentalQuery.data?.issueGraphLivenessAutoRecoveryLookbackHours, experimentalQuery.data?.sddLocalSyncPath]);
 
   if (experimentalQuery.isLoading) {
     return <div className="text-sm text-muted-foreground">Loading experimental settings...</div>;
@@ -216,6 +221,7 @@ export function InstanceExperimentalSettings() {
   const autoRestartDevServerWhenIdle = experimentalQuery.data?.autoRestartDevServerWhenIdle === true;
   const enableIssueGraphLivenessAutoRecovery =
     experimentalQuery.data?.enableIssueGraphLivenessAutoRecovery === true;
+  const enableSddLocalSync = experimentalQuery.data?.enableSddLocalSync === true;
   const lookbackHours =
     experimentalQuery.data?.issueGraphLivenessAutoRecoveryLookbackHours ?? 24;
   const parsedLookbackHours = Number.parseInt(lookbackHoursDraft, 10);
@@ -490,6 +496,57 @@ export function InstanceExperimentalSettings() {
           <p className="text-xs text-muted-foreground">
             Current window: last {lookbackHours} {lookbackHours === 1 ? "hour" : "hours"}.
           </p>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <div className="flex flex-col gap-5">
+          <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1.5">
+                <h2 className="text-sm font-semibold">Issue SDD Local Sync</h2>
+                <p className="max-w-3xl text-sm text-muted-foreground">
+                  Enables two-way synchronization of Spec Driven Documents (SDDs) in a local directory.
+                  <br /><br />
+                  <strong>How it works:</strong> Upon configuring a directory, Paperclip will create subfolders in the format <code>&lt;ID&gt;-issue-name/</code>. Inside these folders, the SDD documents for the corresponding issue will be saved as Markdown files (.md). 
+                  <br /><br />
+                  You can open and edit these files using your favorite editor. Whenever the SDD tab is opened in Paperclip, the system will check if the local files were modified (by checking the modification date) and will sync the changes back to the database automatically.
+                  <br /><br />
+                  A button to quickly open the folder in your file explorer will be displayed in the issue interface if the feature is enabled and properly configured.
+                </p>
+              </div>
+            <ToggleSwitch
+              checked={enableSddLocalSync}
+              onCheckedChange={() => toggleMutation.mutate({ enableSddLocalSync: !enableSddLocalSync })}
+              disabled={toggleMutation.isPending}
+              aria-label="Toggle issue SDD local sync"
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+            <label className="space-y-1.5">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                Target Directory (Absolute Path)
+              </span>
+              <Input
+                type="text"
+                placeholder="C:\Users\...\sdds"
+                value={sddSyncPathDraft}
+                onChange={(event) => setSddSyncPathDraft(event.target.value)}
+                disabled={!enableSddLocalSync}
+              />
+            </label>
+            <Button
+              variant="outline"
+              onClick={() => {
+                toggleMutation.mutate({
+                  sddLocalSyncPath: sddSyncPathDraft,
+                });
+              }}
+              disabled={toggleMutation.isPending || !enableSddLocalSync || sddSyncPathDraft === experimentalQuery.data?.sddLocalSyncPath}
+            >
+              Save path
+            </Button>
+          </div>
         </div>
       </section>
 

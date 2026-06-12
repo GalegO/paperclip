@@ -36,6 +36,8 @@ export interface InstanceExperimentalSettings {
   autoRestartDevServerWhenIdle: boolean;
   enableIssueGraphLivenessAutoRecovery: boolean;
   issueGraphLivenessAutoRecoveryLookbackHours: number;
+  enableSddLocalSync: boolean;
+  sddLocalSyncPath: string;
 }
 
 export interface InstanceSettings {
