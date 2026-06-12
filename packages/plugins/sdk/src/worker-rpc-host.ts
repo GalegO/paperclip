@@ -35,15 +35,14 @@
  */
 
 import fs from "node:fs";
-import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 import type {
   AskUserQuestionsInteraction,
   PaperclipPluginManifestV1,
-  RequestCheckboxConfirmationInteraction,
   RequestConfirmationInteraction,
   SuggestTasksInteraction,
 } from "@paperclipai/shared";
@@ -914,23 +913,6 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
           }) as Promise<RequestConfirmationInteraction>;
         },
 
-        async requestCheckboxConfirmation(
-          issueId: string,
-          interaction,
-          companyId: string,
-          options?: { authorAgentId?: string },
-        ): Promise<RequestCheckboxConfirmationInteraction> {
-          return callHost("issues.createInteraction", {
-            issueId,
-            companyId,
-            interaction: {
-              ...interaction,
-              kind: "request_checkbox_confirmation",
-            },
-            authorAgentId: options?.authorAgentId,
-          }) as Promise<RequestCheckboxConfirmationInteraction>;
-        },
-
         documents: {
           async list(issueId: string, companyId: string) {
             return callHost("issues.documents.list", { issueId, companyId });
@@ -1799,6 +1781,13 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
   // -----------------------------------------------------------------------
   // Bootstrap: wire up stdin readline
   // -----------------------------------------------------------------------
+
+  if (typeof (stdinStream as any).setEncoding === "function") {
+    (stdinStream as any).setEncoding("utf8");
+  }
+  if (typeof (stdoutStream as any).setDefaultEncoding === "function") {
+    (stdoutStream as any).setDefaultEncoding("utf8");
+  }
 
   let readline: ReadlineInterface | null = createInterface({
     input: stdinStream as NodeJS.ReadableStream,

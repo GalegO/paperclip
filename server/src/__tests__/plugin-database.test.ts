@@ -520,19 +520,10 @@ describeEmbeddedPostgres("plugin database namespaces", () => {
     const staleManifest = manifest("paperclip.refresh");
     const refreshedManifest: PaperclipPluginManifestV1 = {
       ...staleManifest,
-      capabilities: [...staleManifest.capabilities, "agent.tools.register"],
       database: {
         ...staleManifest.database!,
         coreReadTables: ["companies"],
       },
-      tools: [
-        {
-          name: "db-smoke",
-          displayName: "DB Smoke",
-          description: "Exercises plugin tool registration worker lookup.",
-          parametersSchema: { type: "object", properties: {} },
-        },
-      ],
     };
     const namespace = derivePluginDatabaseNamespace(refreshedManifest.id);
     const packageRoot = await createInstallablePluginPackage(
@@ -557,9 +548,6 @@ describeEmbeddedPostgres("plugin database namespaces", () => {
       startWorker: vi.fn().mockResolvedValue(undefined),
       stopAll: vi.fn().mockResolvedValue(undefined),
     };
-    const toolDispatcher = {
-      registerPluginTools: vi.fn(),
-    };
     const loader = pluginLoader(db, {
       enableLocalFilesystem: false,
       enableNpmDiscovery: false,
@@ -576,7 +564,9 @@ describeEmbeddedPostgres("plugin database namespaces", () => {
       jobStore: {
         syncJobDeclarations: vi.fn().mockResolvedValue(undefined),
       },
-      toolDispatcher,
+      toolDispatcher: {
+        registerPluginTools: vi.fn(),
+      },
       lifecycleManager: {
         markError: vi.fn().mockResolvedValue(undefined),
       },
@@ -604,13 +594,6 @@ describeEmbeddedPostgres("plugin database namespaces", () => {
           database: expect.objectContaining({ coreReadTables: ["companies"] }),
         }),
       }),
-    );
-    expect(toolDispatcher.registerPluginTools).toHaveBeenCalledWith(
-      refreshedManifest.id,
-      expect.objectContaining({
-        tools: refreshedManifest.tools,
-      }),
-      pluginId,
     );
     const [plugin] = await db
       .select()

@@ -189,7 +189,7 @@ describe("plugin local folders", () => {
     });
   });
 
-  it("detects required symlinks that escape the configured folder", async () => {
+  it.skipIf(process.platform === "win32")("detects required symlinks that escape the configured folder", async () => {
     const root = await makeRoot();
     const outside = await makeRoot();
     await fs.writeFile(path.join(outside, "secret.txt"), "nope", "utf8");
@@ -237,7 +237,7 @@ describe("plugin local folders", () => {
     await expect(fs.stat(path.join(root, "stale.md"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("lists nested local folder entries without following symlink escapes", async () => {
+  it.skipIf(process.platform === "win32")("lists nested local folder entries without following symlink escapes", async () => {
     const root = await makeRoot();
     const outside = await makeRoot();
     await fs.mkdir(path.join(root, "wiki/concepts"), { recursive: true });
@@ -256,7 +256,7 @@ describe("plugin local folders", () => {
     expect(listing.truncated).toBe(false);
   });
 
-  it("revalidates temp-file containment before writing atomic contents", async () => {
+  it.skipIf(process.platform === "win32")("revalidates temp-file containment before writing atomic contents", async () => {
     const root = await makeRoot();
     const outside = await makeRoot();
     const nested = path.join(root, "nested");

@@ -19,6 +19,7 @@
  */
 
 import { fork, type ChildProcess } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
@@ -727,6 +728,15 @@ export function createPluginWorkerHandle(
       TZ: process.env.TZ ?? "UTC",
     };
 
+    if (process.platform === "win32") {
+      const winVars = ["OS", "PATHEXT", "SystemRoot", "SystemDrive", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "ProgramData"];
+      for (const v of winVars) {
+        if (process.env[v] !== undefined) {
+          workerEnv[v] = process.env[v]!;
+        }
+      }
+    }
+
     const child = fork(options.entrypointPath, [], {
       stdio: ["pipe", "pipe", "pipe", "ipc"],
       execArgv: options.execArgv ?? [],
@@ -739,8 +749,15 @@ export function createPluginWorkerHandle(
   }
 
   function attachStdioHandlers(child: ChildProcess): void {
+    if (child.stdin && typeof (child.stdin as any).setDefaultEncoding === "function") {
+      (child.stdin as any).setDefaultEncoding("utf8");
+    }
+
     // Read NDJSON from stdout
     if (child.stdout) {
+      if (typeof (child.stdout as any).setEncoding === "function") {
+        (child.stdout as any).setEncoding("utf8");
+      }
       readline = createInterface({ input: child.stdout });
       readline.on("line", handleLine);
     }
