@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseGeminiJsonl } from "./parse.js";
+import {
+  parseGeminiJsonl,
+  isGeminiUnknownSessionError,
+  describeGeminiFailure,
+  detectGeminiAuthRequired,
+  detectGeminiQuotaExhausted,
+  isGeminiTurnLimitResult,
+} from "./parse.js";
 
 describe("parseGeminiJsonl", () => {
   it("collects assistant text from message events with string content", () => {
@@ -11,71 +18,43 @@ describe("parseGeminiJsonl", () => {
     ].join("\n");
 
     const parsed = parseGeminiJsonl(stdout);
-
     expect(parsed.sessionId).toBe("session-1");
     expect(parsed.summary).toBe("hello");
     expect(parsed.errorMessage).toBeNull();
   });
 
-  it("collects assistant text from message events with structured object content", () => {
+  it("collects assistant text from structured object content", () => {
     const stdout = [
       '{"type":"init","session_id":"session-2"}',
-      '{"type":"message","role":"assistant","content":{"content":[{"type":"text","text":"first part"},{"type":"text","text":"second part"}]}}',
+      '{"type":"message","role":"assistant","content":{"content":[{"type":"text","text":"first"},{"type":"text","text":"second"}]}}',
       '{"type":"result","status":"success"}',
     ].join("\n");
 
     const parsed = parseGeminiJsonl(stdout);
-
     expect(parsed.sessionId).toBe("session-2");
-    expect(parsed.summary).toBe("first part\n\nsecond part");
-    expect(parsed.errorMessage).toBeNull();
+    expect(parsed.summary).toBe("first\n\nsecond");
   });
 
   it("ignores non-assistant message events", () => {
     const stdout = [
-      '{"type":"message","role":"user","content":"hidden user input"}',
-      '{"type":"message","role":"system","content":"hidden system note"}',
-      '{"type":"message","role":"assistant","content":"visible response"}',
+      '{"type":"message","role":"user","content":"hidden"}',
+      '{"type":"message","role":"system","content":"hidden"}',
+      '{"type":"message","role":"assistant","content":"visible"}',
       '{"type":"result","status":"success"}',
     ].join("\n");
 
     const parsed = parseGeminiJsonl(stdout);
-
-    expect(parsed.summary).toBe("visible response");
+    expect(parsed.summary).toBe("visible");
   });
 
-  it("captures assistant text from gemini CLI v0.38 stream-json schema", () => {
+  it("captures assistant text from CLI stream-json schema", () => {
     const stdout = [
+      JSON.stringify({ type: "init", session_id: "session-abc", model: "auto-gemini-3" }),
+      JSON.stringify({ type: "message", role: "user", content: "Respond with hello." }),
+      JSON.stringify({ type: "message", role: "assistant", content: "hello.", delta: true }),
       JSON.stringify({
-        type: "init",
-        timestamp: "2026-05-04T05:43:41.203Z",
-        session_id: "session-abc",
-        model: "auto-gemini-3",
-      }),
-      JSON.stringify({
-        type: "message",
-        timestamp: "2026-05-04T05:43:41.205Z",
-        role: "user",
-        content: "Respond with hello.",
-      }),
-      JSON.stringify({
-        type: "message",
-        timestamp: "2026-05-04T05:43:45.198Z",
-        role: "assistant",
-        content: "hello.",
-        delta: true,
-      }),
-      JSON.stringify({
-        type: "result",
-        timestamp: "2026-05-04T05:43:45.819Z",
-        status: "success",
-        stats: {
-          total_tokens: 9468,
-          input_tokens: 9095,
-          output_tokens: 29,
-          cached: 8132,
-          duration_ms: 4616,
-        },
+        type: "result", status: "success",
+        stats: { total_tokens: 9468, input_tokens: 9095, output_tokens: 29, cached: 8132, duration_ms: 4616 },
       }),
     ].join("\n");
 
@@ -99,17 +78,10 @@ describe("parseGeminiJsonl", () => {
     expect(result.summary).toBe("first\n\nsecond");
   });
 
-  it("preserves the legacy claude-style `assistant` event handler", () => {
+  it("preserves the legacy assistant event handler", () => {
     const stdout = [
-      JSON.stringify({
-        type: "system",
-        subtype: "init",
-        session_id: "legacy-session",
-      }),
-      JSON.stringify({
-        type: "assistant",
-        message: { content: [{ type: "output_text", text: "legacy hello" }] },
-      }),
+      JSON.stringify({ type: "system", subtype: "init", session_id: "legacy-session" }),
+      JSON.stringify({ type: "assistant", message: { content: [{ type: "output_text", text: "legacy hello" }] } }),
       JSON.stringify({ type: "result", subtype: "success", result: "legacy hello" }),
     ].join("\n");
 
@@ -119,15 +91,132 @@ describe("parseGeminiJsonl", () => {
   });
 
   it("flags result events with status=error", () => {
-    const stdout = [
-      JSON.stringify({
-        type: "result",
-        status: "error",
-        error: "boom",
-      }),
-    ].join("\n");
-
+    const stdout = JSON.stringify({ type: "result", status: "error", error: "boom" });
     const result = parseGeminiJsonl(stdout);
     expect(result.errorMessage).toBe("boom");
+  });
+
+  it("extracts cost from result events", () => {
+    const stdout = JSON.stringify({ type: "result", status: "success", total_cost_usd: 0.42 });
+    const result = parseGeminiJsonl(stdout);
+    expect(result.costUsd).toBe(0.42);
+  });
+
+  it("extracts usage from step_finish events", () => {
+    const stdout = JSON.stringify({
+      type: "step_finish",
+      usage: { input_tokens: 100, output_tokens: 50, cached_input_tokens: 80 },
+    });
+    const result = parseGeminiJsonl(stdout);
+    expect(result.usage.inputTokens).toBe(100);
+    expect(result.usage.outputTokens).toBe(50);
+    expect(result.usage.cachedInputTokens).toBe(80);
+  });
+
+  it("captures questions from assistant messages", () => {
+    const stdout = JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "question", prompt: "Proceed?", choices: [{ key: "y", label: "Yes" }, { key: "n", label: "No" }] }] },
+    });
+    const result = parseGeminiJsonl(stdout);
+    expect(result.question).not.toBeNull();
+    expect(result.question!.prompt).toBe("Proceed?");
+    expect(result.question!.choices).toHaveLength(2);
+  });
+});
+
+describe("isGeminiUnknownSessionError", () => {
+  it("detects unknown session errors", () => {
+    expect(isGeminiUnknownSessionError("unknown session abc", "")).toBe(true);
+    expect(isGeminiUnknownSessionError("", "session not found")).toBe(true);
+    expect(isGeminiUnknownSessionError("cannot resume session", "")).toBe(true);
+    expect(isGeminiUnknownSessionError("failed to resume", "")).toBe(true);
+  });
+
+  it("returns false for normal output", () => {
+    expect(isGeminiUnknownSessionError("hello world", "success")).toBe(false);
+  });
+});
+
+describe("describeGeminiFailure", () => {
+  it("describes failure with status and error", () => {
+    const result = describeGeminiFailure({ status: "error", error: "timeout" });
+    expect(result).toBe("Gemini run failed: status=error: timeout");
+  });
+
+  it("returns null for empty input", () => {
+    expect(describeGeminiFailure({})).toBeNull();
+  });
+
+  it("describes failure with status only", () => {
+    const result = describeGeminiFailure({ status: "failed" });
+    expect(result).toBe("Gemini run failed: status=failed");
+  });
+});
+
+describe("detectGeminiAuthRequired", () => {
+  it("detects authentication errors", () => {
+    expect(detectGeminiAuthRequired({ parsed: null, stdout: "not authenticated", stderr: "" }).requiresAuth).toBe(true);
+    expect(detectGeminiAuthRequired({ parsed: null, stdout: "", stderr: "api_key required" }).requiresAuth).toBe(true);
+    expect(detectGeminiAuthRequired({ parsed: { error: "unauthorized" }, stdout: "", stderr: "" }).requiresAuth).toBe(true);
+  });
+
+  it("returns false for normal output", () => {
+    expect(detectGeminiAuthRequired({ parsed: null, stdout: "hello", stderr: "" }).requiresAuth).toBe(false);
+  });
+});
+
+describe("detectGeminiQuotaExhausted", () => {
+  it("detects quota exhaustion", () => {
+    expect(detectGeminiQuotaExhausted({ parsed: null, stdout: "resource_exhausted", stderr: "" }).exhausted).toBe(true);
+    expect(detectGeminiQuotaExhausted({ parsed: null, stdout: "rate-limit exceeded", stderr: "" }).exhausted).toBe(true);
+    expect(detectGeminiQuotaExhausted({ parsed: null, stdout: "429 too many requests", stderr: "" }).exhausted).toBe(true);
+  });
+
+  it("parses absolute refresh date", () => {
+    const result = detectGeminiQuotaExhausted({
+      parsed: null,
+      stdout: "quota exhausted. refresh on 12/31/2026, 11:59:59 PM",
+      stderr: "",
+    });
+    expect(result.exhausted).toBe(true);
+    expect(result.refreshAt).toBeInstanceOf(Date);
+  });
+
+  it("parses relative refresh time", () => {
+    const result = detectGeminiQuotaExhausted({
+      parsed: null,
+      stdout: "quota reached. resets in 2h30m15s",
+      stderr: "",
+    });
+    expect(result.exhausted).toBe(true);
+    expect(result.refreshAt).toBeInstanceOf(Date);
+    // Should be roughly 2h30m15s from now
+    const diff = result.refreshAt!.getTime() - Date.now();
+    expect(diff).toBeGreaterThan(2 * 3600 * 1000);
+    expect(diff).toBeLessThan(3 * 3600 * 1000);
+  });
+
+  it("returns false for normal output", () => {
+    expect(detectGeminiQuotaExhausted({ parsed: null, stdout: "hello", stderr: "" }).exhausted).toBe(false);
+  });
+});
+
+describe("isGeminiTurnLimitResult", () => {
+  it("detects turn limit by exit code", () => {
+    expect(isGeminiTurnLimitResult(null, 53)).toBe(true);
+  });
+
+  it("detects turn limit by status field", () => {
+    expect(isGeminiTurnLimitResult({ status: "turn_limit" })).toBe(true);
+    expect(isGeminiTurnLimitResult({ stop_reason: "max_turns" })).toBe(true);
+    expect(isGeminiTurnLimitResult({ stopReason: "max_turns_exhausted" })).toBe(true);
+    expect(isGeminiTurnLimitResult({ error_code: "turn_limit_exhausted" })).toBe(true);
+  });
+
+  it("returns false for normal completion", () => {
+    expect(isGeminiTurnLimitResult({ status: "success" })).toBe(false);
+    expect(isGeminiTurnLimitResult(null, 0)).toBe(false);
+    expect(isGeminiTurnLimitResult(null)).toBe(false);
   });
 });

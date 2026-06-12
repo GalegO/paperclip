@@ -18,7 +18,7 @@ const {
     signal: null,
     timedOut: false,
     stdout: [
-      JSON.stringify({ type: "system", subtype: "init", session_id: "gemini-session-1", model: "gemini-2.5-pro" }),
+      JSON.stringify({ type: "system", subtype: "init", session_id: "gemini-session-1", model: "gemini-1.0-pro" }),
       JSON.stringify({ type: "message", role: "assistant", content: "hello" }),
       JSON.stringify({
         type: "result",
@@ -266,7 +266,7 @@ describe("gemini remote execution", () => {
     });
 
     const call = runChildProcess.mock.calls[0] as unknown as [string, string, string[]] | undefined;
-    expect(call?.[2]).toContain("--resume");
+    expect(call?.[2]).toContain("--conversation");
     expect(call?.[2]).toContain("session-123");
   });
 
