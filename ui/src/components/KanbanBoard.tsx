@@ -23,6 +23,9 @@ import { Identity } from "./Identity";
 import type { Issue, IssueStatus } from "@paperclipai/shared";
 import { AlertTriangle } from "lucide-react";
 import { isSuccessfulRunHandoffRequired } from "../lib/successful-run-handoff";
+import { Badge } from "@/components/ui/badge";
+import { parseTaxonomyTag } from "../lib/taxonomy";
+import { cn } from "../lib/utils";
 
 export const KANBAN_BOARD_HIGH_VOLUME_THRESHOLD = 100;
 export const KANBAN_COLUMN_PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
@@ -198,6 +201,8 @@ function KanbanCard({
     isDragging,
   } = useSortable({ id: issue.id, data: { issue } });
 
+  const taxonomy = parseTaxonomyTag(issue.title);
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -236,7 +241,7 @@ function KanbanCard({
           {isSuccessfulRunHandoffRequired(issue) ? (
             <span
               className="inline-flex items-center gap-1 rounded-full border border-amber-400/45 bg-amber-50/60 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-300/35 dark:bg-amber-400/10 dark:text-amber-300"
-              title="This task needs a next step"
+              title="This issue needs a next step"
               aria-label="Needs next step"
             >
               <AlertTriangle className="h-3 w-3" />
@@ -253,7 +258,14 @@ function KanbanCard({
             </span>
           )}
         </div>
-        <p className={`${compact ? "mb-1.5 text-xs" : "mb-2 text-sm"} leading-snug line-clamp-2`}>{issue.title}</p>
+        <p className={`${compact ? "mb-1.5 text-xs" : "mb-2 text-sm"} leading-snug line-clamp-2`}>
+          {taxonomy.tag ? (
+            <Badge variant={taxonomy.badgeVariant} className={cn("mr-1.5 h-4 text-[9px] px-1 py-0 font-mono tracking-tighter", taxonomy.colorClass)}>
+              {taxonomy.tag}
+            </Badge>
+          ) : null}
+          {taxonomy.cleanTitle}
+        </p>
         <div className="flex items-center gap-2 min-w-0">
           <PriorityIcon priority={issue.priority} />
           {issue.assigneeAgentId && (() => {
