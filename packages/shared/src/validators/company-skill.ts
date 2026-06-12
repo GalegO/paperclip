@@ -182,19 +182,6 @@ export const catalogSkillFileSchema = z.object({
   sha256: z.string().min(1),
 });
 
-export const catalogSkillGitHubSourceSchema = z.object({
-  type: z.literal("github"),
-  hostname: z.string().min(1),
-  owner: z.string().min(1),
-  repo: z.string().min(1),
-  ref: z.string().min(1),
-  commit: z.string().regex(/^[0-9a-f]{40}$/i),
-  path: z.string(),
-  url: z.string().url(),
-});
-
-export const catalogSkillSourceSchema = catalogSkillGitHubSourceSchema;
-
 export const catalogSkillSchema = z.object({
   id: z.string().min(1),
   key: z.string().min(1),
@@ -213,7 +200,6 @@ export const catalogSkillSchema = z.object({
   tags: z.array(z.string()),
   files: z.array(catalogSkillFileSchema),
   contentHash: z.string().min(1),
-  source: catalogSkillSourceSchema.optional(),
   packageName: z.string().min(1).optional(),
   packageVersion: z.string().min(1).optional(),
 });

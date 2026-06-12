@@ -11,6 +11,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
+import { Badge } from "@/components/ui/badge";
+import { parseTaxonomyTag } from "../lib/taxonomy";
+import { cn } from "../lib/utils";
 
 export type RoutineListProjectSummary = {
   name: string;
@@ -63,7 +66,6 @@ export function RoutineListRow<TRoutine extends RoutineListRowItem>({
   disableRunNow = false,
   disableToggle = false,
   hideArchiveAction = false,
-  divider = true,
   onRunNow,
   onToggleEnabled,
   onToggleArchived,
@@ -81,8 +83,6 @@ export function RoutineListRow<TRoutine extends RoutineListRowItem>({
   disableRunNow?: boolean;
   disableToggle?: boolean;
   hideArchiveAction?: boolean;
-  /** Render a bottom divider between consecutive rows. Off when the group is its own card. */
-  divider?: boolean;
   onRunNow: (routine: TRoutine) => void;
   onToggleEnabled: (routine: TRoutine, enabled: boolean) => void;
   onToggleArchived?: (routine: TRoutine) => void;
@@ -94,17 +94,21 @@ export function RoutineListRow<TRoutine extends RoutineListRowItem>({
   const agent = routine.assigneeAgentId ? agentById.get(routine.assigneeAgentId) ?? null : null;
   const isDraft = !isArchived && !routine.assigneeAgentId;
   const runDisabled = runningRoutineId === routine.id || isArchived || disableRunNow;
+  const taxonomy = parseTaxonomyTag(routine.title);
 
   return (
     <Link
       to={href}
-      className={`group flex flex-col gap-3 px-3 py-3 transition-colors hover:bg-accent/50 sm:flex-row sm:items-center no-underline text-inherit${
-        divider ? " border-b border-border last:border-b-0" : ""
-      }`}
+      className="group flex flex-col gap-3 border-b border-border px-3 py-3 transition-colors hover:bg-accent/50 last:border-b-0 sm:flex-row sm:items-center no-underline text-inherit"
     >
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate text-sm font-medium">{routine.title}</span>
+          {taxonomy.tag ? (
+            <Badge variant={taxonomy.badgeVariant} className={cn("h-5 text-[10px] px-1.5 py-0", taxonomy.colorClass)}>
+              {taxonomy.tag}
+            </Badge>
+          ) : null}
+          <span className="truncate text-sm font-medium">{taxonomy.cleanTitle}</span>
           {(isArchived || routine.status === "paused" || isDraft) ? (
             <span className="text-xs text-muted-foreground">
               {isArchived ? "archived" : isDraft ? "draft" : "paused"}

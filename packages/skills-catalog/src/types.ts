@@ -13,19 +13,6 @@ export interface CatalogSkillFile {
   sha256: string;
 }
 
-export interface CatalogSkillGitHubSource {
-  type: "github";
-  hostname: string;
-  owner: string;
-  repo: string;
-  ref: string;
-  commit: string;
-  path: string;
-  url: string;
-}
-
-export type CatalogSkillSource = CatalogSkillGitHubSource;
-
 export interface CatalogSkill {
   id: string;
   key: string;
@@ -44,7 +31,6 @@ export interface CatalogSkill {
   tags: string[];
   files: CatalogSkillFile[];
   contentHash: string;
-  source?: CatalogSkillSource;
 }
 
 export interface CatalogManifest {

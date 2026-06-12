@@ -28,16 +28,6 @@ const catalogSkill = {
   tags: ["review"],
   files: [{ path: "SKILL.md", kind: "skill", sizeBytes: 8, sha256: "abc" }],
   contentHash: "sha256:abc",
-  source: {
-    type: "github",
-    hostname: "github.com",
-    owner: "example",
-    repo: "review-skill",
-    ref: "v1.0.0",
-    commit: "0123456789abcdef0123456789abcdef01234567",
-    path: "skills/review",
-    url: "https://github.com/example/review-skill/tree/v1.0.0/skills/review",
-  },
 };
 
 const companySkill = {
@@ -117,7 +107,6 @@ describe("company skill catalog validators", () => {
       },
       catalogSkill: {
         id: catalogSkill.id,
-        source: catalogSkill.source,
       },
     });
   });
