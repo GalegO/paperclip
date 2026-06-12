@@ -55,6 +55,7 @@ import {
 import { conflict, HttpError, notFound } from "../errors.js";
 import { logger } from "../middleware/logger.js";
 import { publishLiveEvent } from "./live-events.js";
+import { buildMemoryPromptBlock } from "./memory.js";
 import { getRunLogStore, type RunLogHandle } from "./run-log-store.js";
 import { getServerAdapter, listAdapterModelProfiles, runningProcesses } from "../adapters/index.js";
 import type {
@@ -8509,6 +8510,16 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       })(),
     };
     context.paperclipWorkspaces = resolvedWorkspace.workspaceHints;
+    
+    // Load hierarchical memory (L4-L1) for prefix caching injection
+    const memoryIds = {
+      global: undefined,
+      company: agent.companyId,
+      project: executionWorkspace.projectId ?? undefined,
+      agent: agent.id,
+    };
+    context.paperclipMemoryMarkdown = await buildMemoryPromptBlock(memoryIds);
+
     const runtimeServiceIntents = (() => {
       const runtimeConfig = parseObject(resolvedConfig.workspaceRuntime);
       return Array.isArray(runtimeConfig.services)
