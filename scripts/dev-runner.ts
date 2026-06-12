@@ -633,6 +633,28 @@ async function maybeAutoRestartChild() {
 }
 
 function installDevIntervals() {
+  if (stdin.isTTY) {
+    try {
+      stdin.setRawMode(true);
+      stdin.resume();
+      stdin.setEncoding("utf8");
+      stdin.on("data", (data) => {
+        const key = data.toString();
+        
+        // ctrl-c (end of text) is \u0003
+        if (key === "\u0003" || key.toLowerCase() === "q") {
+          console.log(`\n[paperclip] shutting down gracefully...\n`);
+          void shutdown("SIGINT", 0);
+        }
+      });
+      console.log("[paperclip] press 'q' to shutdown gracefully");
+    } catch (err) {
+      console.warn("[paperclip] failed to set raw mode on stdin:", err instanceof Error ? err.message : err);
+    }
+  } else {
+    console.log("[paperclip] non-interactive terminal detected, 'q' shortcut disabled");
+  }
+
   if (mode !== "dev") return;
 
   scanTimer = setInterval(() => {
@@ -652,9 +674,13 @@ function clearDevIntervals() {
     clearInterval(autoRestartTimer);
     autoRestartTimer = null;
   }
+  if (stdin.isTTY) {
+    stdin.setRawMode(false);
+    stdin.pause();
+  }
 }
 
-async function shutdown(signal: NodeJS.Signals) {
+async function shutdown(signal: NodeJS.Signals, explicitExitCode?: number) {
   if (shuttingDown) return;
   shuttingDown = true;
   clearDevIntervals();
@@ -673,7 +699,7 @@ async function shutdown(signal: NodeJS.Signals) {
     exitForSignal(exit.signal);
     return;
   }
-  process.exit(exit.code ?? 0);
+  process.exit(explicitExitCode ?? exit.code ?? 0);
 }
 
 process.on("SIGINT", () => {
